@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+	<style>
+	button:active { 
+    background-color: yellow;
+}
+	</style>
+</head>
+<body>
+<button type="checkbox">Zmiana klawisza</button>
+<pre id="log"></pre>
+<audio hidden="true" autoplay="true"></audio>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.js"></script>
+
+<script>
+	const socket = io('localhost:8080');
+
+</script>
+
+
+<script>
+var chunks = [];
+var key_mode = 1; // key mode=0 - tryb automatyczny(wykrywa ciszę), mode=1 - tryb po kliknięciu klawisza.
+var key = "f"; // Klawisz użyty do wywowałania Voice_Send - wysłania głosu.
+var key_press_state = false;
+// time counter - potrzeby do tego, aby blokować niepotrzebne wysyłanie głosu, gdy odtworzymy inny głos. Ponieważ będzie on wydobywał się z głośników
+// ^_^
+var time_end = null;
+var time_start = null;
+var copy_recorder;
+var blockSendVoice = false;
+
+if(key_mode == 1) {
+	window.addEventListener("keydown", Voice_Send);
+	window.addEventListener("keyup", Voice_Send);
+}
+
+function Voice_Send(e){
+	if (key == e.key) {
+		e.repeat ? '' : console.log(e.type); // Pokazuje aktualnie kliknięty klawisz (akcje)
+		if (!e.repeat) {
+			console.log(copy_recorder);
+		}
+	}
+}
+
+function Silend_Send(stream, onSoundEnd = _=>{}, onSoundStart = _=>{}, silence_delay = 500, min_decibels = -80) {
+  const ctx = new AudioContext();
+  const analyser = ctx.createAnalyser();
+  const streamNode = ctx.createMediaStreamSource(stream);
+  streamNode.connect(analyser);
+  analyser.minDecibels = min_decibels;
+
+  var mediaRecorder = new MediaRecorder(stream);
+  copy_recorder = mediaRecorder;
+  mediaRecorder.ondataavailable = function(e) {
+  		if (chunks.length > 0) {chunks.splice(0, 1);}
+      	chunks.push(e.data);
+    };
+
+  mediaRecorder.onstop = function(e) {
+
+  		var blob = new Blob(chunks, { 'type' : 'audio/ogg; codecs=opus' });
+		console.log(blob);
+  		(socket.connected) ? socket.emit("audio", chunks, (time_end-time_start)) : console.log('Nie ma połączenia z socket');
+  		
+  		// if(time_start != null) console.log("Trawało to:", (time_end-time_start)/1000, "sekundy");
+		
+       	//document.querySelector("audio").src = URL.createObjectURL(blob);
+       	blockSendVoice = true;
+       	setTimeout(function() {
+       		blockSendVoice = !blockSendVoice;
+       		console.log(blockSendVoice)
+       	}, (time_end-time_start)); // W razie co, to można doliczyć tutaj 200 milisekund, aby na 100% nie było pogłosu.
+  	}
+
+  const data = new Uint8Array(analyser.frequencyBinCount); // will hold our data
+  let silence_start = performance.now();
+  let triggered = false; // trigger only once per silence event
+  time = silence_start;
+  function loop(time) {
+    requestAnimationFrame(loop); // we'll loop every 60th of a second to check
+    analyser.getByteFrequencyData(data); // get current data
+    if (data.some(v => v)) { // if there is data above the given db limit
+      if(triggered){
+        triggered = false;
+        onSoundStart(mediaRecorder);
+        }
+      silence_start = time; // set it to now
+    }
+    if (!triggered && time - silence_start > silence_delay) {
+      onSoundEnd(mediaRecorder);
+      triggered = true;
+    }
+  }
+  loop();
+}
+
+function onSilence(recorder) {
+	time_end = (time_start != null) ? Date.now() : null;
+
+	log.textContent += 'silence\n';
+   	if(recorder.state == 'recording') recorder.stop();
+}
+function onSpeak(recorder) {
+	// na początku sprawdzam, czy ktoś akturat nie mówi. Jeżeli nie, to puszczam dalej.
+	if (!blockSendVoice) {
+		time_start = Date.now();
+		log.textContent += 'speaking\n';
+		recorder.start();
+	}
+
+}
+
+socket.on('connect', function(){
+	socket.emit('login', prompt('Jak masz na imię?'));
+	socket.on('hello', function(data){
+		console.log(data, 'jest połączony z serwerem!');
+		alert(data + ' połączył się z socketem!')
+	})
+})
+socket.on('stream', function(blob_object){
+	var blob = new Blob(blob_object, { 'type' : 'audio/ogg; codecs=opus' })
+	
+	document.querySelector("audio").src = URL.createObjectURL(blob);
+});
+  
+navigator.mediaDevices.getUserMedia({
+    audio: true
+  })
+  .then(stream => {
+    Silend_Send(stream, onSilence, onSpeak, 500, -45);
+    // do something else with the stream
+  }).catch(e=>log.textContent=e);
+</script>
+</body>
+</html>
