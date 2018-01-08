@@ -13,7 +13,7 @@ fs = require('fs');
 
 
 
-app.get('/chat',function(req,res){
+app.get('/',function(req,res){
        
      res.sendFile(__dirname + '/index.html');
 
