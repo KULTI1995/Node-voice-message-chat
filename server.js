@@ -1,28 +1,23 @@
-var app = require('http').createServer(handler)
-  , io = require('socket.io')(app)
-  , fs = require('fs')
+var express = require('express');
+var app = express();
 
 var server_port = process.env.OPENSHIFT_NODEJS_PORT || 8080
 var server_ip_address = process.env.OPENSHIFT_NODEJS_IP || '127.0.0.1'
  
-app.listen(server_port, server_ip_address, function () {
+var server = app.listen(server_port, server_ip_address, function () {
   console.log( "Listening on " + server_ip_address + ", port " + server_port )
 });
 
-function handler (req, res) {
-  fs.readFile(__dirname + '/index.html',
-  function (err, data) {
-    if (err) {
-      res.writeHead(500);
-      return res.end('Error loading index.html');
-    }
-
-    res.writeHead(200, {'Content-Type': 'text/html' });
-    res.end(data);
+var io = require('socket.io')(server);
+fs = require('fs');
 
 
-  });
-}
+
+app.get('/chat',function(req,res){
+       
+     res.sendFile(__dirname + '/index.html');
+
+});
 
 io.on('connection', function (socket) {
   socket.on('login', function(data){
