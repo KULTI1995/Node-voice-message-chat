@@ -14,20 +14,33 @@ fs = require('fs');
 
 
 app.get('/',function(req,res){
-       
      res.sendFile(__dirname + '/index.html');
 
 });
 
+count = 0; //numbers of active users. (all)
+
 io.on('connection', function (socket) {
-  socket.on('login', function(data){
-    socket.nickname = data;
-    console.log(data, "Jest połączony !");
-    socket.broadcast.emit('hello', socket.nickname);
+    count++
+    socket.emit('count', {count:count})
+    socket.on('disconnect', function(){
+        count--
+        socket.broadcast.emit('count', {count:count});
+    });
+    socket.on('login', function(data, kolor){
+        socket.nickname = data;
+        socket.nickkolor = kolor; 
+        console.log(data, "Jest połączony !");
+        socket.broadcast.emit('hello', socket.nickname);
   });
-  socket.on('audio', function(blob_object, time){
-    console.log(time);
-    socket.emit('stream', blob_object);
+    socket.on('audio', function(blob_object, time){
+        console.log(time);
+        socket.broadcast.emit('stream', blob_object, time, socket.nickname, socket.nickkolor);
+  });
+    
+    socket.on('message', function(message, time){
+        console.log(message, time, socket.nickkolor, socket.nickkolor);
+        socket.broadcast.emit('sendmessage', message, socket.nickname, socket.nickkolor, time);
   });
 });
 

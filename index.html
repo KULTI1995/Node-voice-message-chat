@@ -1,29 +1,80 @@
-<!DOCTYPE html>
+    <!DOCTYPE html>
 <html>
 <head>
 	<title></title>
 	<style>	
-	button:active { 
-    background-color: yellow;
-}
+        #log > p:last-child{
+            animation: mruganie 2s;
+        }
+        
+        
+        
+        @keyframes mruganie{
+            0%   {background-color: white;}
+            25%  {background-color: aqua;}
+            50%  {background-color: white;}
+            75%  {background-color: aqua;}
+            100% {background-color: white;}
+        }
+        
+        .play{
+            animation: play_blob 1s infinite;
+        }
+        
+        @keyframes play_blob{
+            0%   {color: black;}
+            25%  {color: red; font-size:130%}
+            50%  {color: black;}
+            75%  {color: red; font-size:130%}
+            100% {color: black;}
+        }
+        
+        input{
+            width: 80%;
+            height: 20px;
+        }
+        
+        #counter{
+            font-weight: bold;
+            font-size: 35px;
+            position:absolute;
+            top:15px;
+            right:15px;
+        }
 	</style>
 </head>
 <body>
-<button type="checkbox">Zmiana klawisza</button>
-<pre id="log"></pre>
+
+<div id="counter"></div>
+<div style="width:50%; margin:auto; position:relative;">
+    <pre id="log"></pre>
+<input class="messagesubmit" type="text"/><input class="messagesubmit" type="submit"/>
 <audio hidden="true" autoplay="true"></audio>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.4/socket.io.js"></script>
+<script src="http://momentjs.com/downloads/moment.js"></script>
 
 <script>
-	const socket = io('ws://172.30.79.14:8000');
-
+	const socket = io('127.0.0.1:8080');
+    
 </script>
 
 
 <script>
+    button_submit = document.getElementsByClassName('messagesubmit');
+    button_submit[0].addEventListener("keypress", function(e){
+        if(e.keyCode == 13){
+        SendThisMessage(this.value);
+        this.value = '';
+        }
+});
+    
+function SendThisMessage(message){
+  socket.emit('message', message, Date.now());
+};
 var chunks = [];
-var key_mode = 1; // key mode=0 - tryb automatyczny(wykrywa ciszę), mode=1 - tryb po kliknięciu klawisza.
+var autoplay = "0";
+var key_mode = '1'; // key mode=0 - tryb automatyczny(wykrywa ciszę), mode=1 - tryb po kliknięciu klawisza.
 var key = "f"; // Klawisz użyty do wywowałania Voice_Send - wysłania głosu.
 var key_press_state = false;
 // time counter - potrzeby do tego, aby blokować niepotrzebne wysyłanie głosu, gdy odtworzymy inny głos. Ponieważ będzie on wydobywał się z głośników
@@ -33,20 +84,6 @@ var time_start = null;
 var copy_recorder;
 var blockSendVoice = false;
 
-if(key_mode == 1) {
-	window.addEventListener("keydown", Voice_Send);
-	window.addEventListener("keyup", Voice_Send);
-}
-
-function Voice_Send(e){
-	if (key == e.key) {
-		e.repeat ? '' : console.log(e.type); // Pokazuje aktualnie kliknięty klawisz (akcje)
-		if (!e.repeat) {
-			console.log(copy_recorder);
-		}
-	}
-}
-
 function Silend_Send(stream, onSoundEnd = _=>{}, onSoundStart = _=>{}, silence_delay = 500, min_decibels = -80) {
   const ctx = new AudioContext();
   const analyser = ctx.createAnalyser();
@@ -55,7 +92,6 @@ function Silend_Send(stream, onSoundEnd = _=>{}, onSoundStart = _=>{}, silence_d
   analyser.minDecibels = min_decibels;
 
   var mediaRecorder = new MediaRecorder(stream);
-  copy_recorder = mediaRecorder;
   mediaRecorder.ondataavailable = function(e) {
   		if (chunks.length > 0) {chunks.splice(0, 1);}
       	chunks.push(e.data);
@@ -70,11 +106,6 @@ function Silend_Send(stream, onSoundEnd = _=>{}, onSoundStart = _=>{}, silence_d
   		// if(time_start != null) console.log("Trawało to:", (time_end-time_start)/1000, "sekundy");
 		
        	//document.querySelector("audio").src = URL.createObjectURL(blob);
-       	blockSendVoice = true;
-       	setTimeout(function() {
-       		blockSendVoice = !blockSendVoice;
-       		console.log(blockSendVoice)
-       	}, (time_end-time_start)); // W razie co, to można doliczyć tutaj 200 milisekund, aby na 100% nie było pogłosu.
   	}
 
   const data = new Uint8Array(analyser.frequencyBinCount); // will hold our data
@@ -102,39 +133,137 @@ function Silend_Send(stream, onSoundEnd = _=>{}, onSoundStart = _=>{}, silence_d
 function onSilence(recorder) {
 	time_end = (time_start != null) ? Date.now() : null;
 
-	log.textContent += 'silence\n';
+	//log.textContent += 'silence\n';
    	if(recorder.state == 'recording') recorder.stop();
 }
 function onSpeak(recorder) {
 	// na początku sprawdzam, czy ktoś akturat nie mówi. Jeżeli nie, to puszczam dalej.
 	if (!blockSendVoice) {
 		time_start = Date.now();
-		log.textContent += 'speaking\n';
+		//log.textContent += 'speaking\n';
 		recorder.start();
 	}
 
 }
 
 socket.on('connect', function(){
-	socket.emit('login', prompt('Jak masz na imię?'));
+	socket.emit('login', prompt('Jak masz na imię?'), prompt('Jaki kolor?'));
 	socket.on('hello', function(data){
 		console.log(data, 'jest połączony z serwerem!');
 		alert(data + ' połączył się z socketem!')
-	})
-})
-socket.on('stream', function(blob_object){
-	var blob = new Blob(blob_object, { 'type' : 'audio/ogg; codecs=opus' })
-	
-	document.querySelector("audio").src = URL.createObjectURL(blob);
+	});
+    
+    socket.on('count', function(number_users){
+        counter = document.querySelector("#counter");
+        counter.textContent=number_users.count;
+    });
+                                       
+    socket.on('sendmessage', function(message, sender_nick, color, time){
+        console.log(message, sender_nick, color, time);
+		var log_apped = document.querySelector("#log");
+    
+        var para = document.createElement("p");
+        var nick_color = document.createElement("span");
+        var other_text = document.createTextNode(`(${moment(time).format('h:mm:ss')}): ${message}\n`)
+        log_apped.appendChild(para);
+        para.appendChild(nick_color).innerHTML=sender_nick;
+        para.lastChild.style.color=color;
+        para.lastChild.style.fontWeight = "bolder";
+        para.appendChild(other_text);   
+	});
 });
-  
+socket.on('stream', function(blob_object, time, sender_nick, color){
+    var log_apped = document.querySelector("#log");
+    
+    var para = document.createElement("p");
+    var nick_color = document.createElement("span");
+    var player_blob = document.createElement("span");
+    var other_text = document.createTextNode(`: wysłał wiadomość głosową (${time/1000} s.)`)
+    log_apped.appendChild(para);
+    
+    para.appendChild(nick_color).innerHTML=sender_nick;
+    para.lastChild.style.color=color;
+    para.lastChild.style.fontWeight = "bolder";
+    
+    para.appendChild(other_text);
+    
+    //.innerHTML=`<b>${sender_nick}</b>: wysłał wiadomość głosową (${time/1000} s.)\n`
+    
+    
+	var blob = new Blob(blob_object, { 'type' : 'audio/ogg; codecs=opus' });
+    //log.textContent += `Mówi ${sender_nick} ! (${time/1000} s.)\n`
+	
+    var url_blob = URL.createObjectURL(blob);
+    
+    var player = para.appendChild(player_blob).innerHTML="►\n";
+    
+	if(autoplay=='1') {
+        document.querySelector("audio").src = url_blob;
+        player_blob.className = "play";
+        blockSendVoice = true;
+    setTimeout(function(){
+            player_blob.className = "";
+            para.className = "";
+            blockSendVoice = !blockSendVoice;
+       		console.log(blockSendVoice)
+        }, time)
+    };
+    
+    player_blob.addEventListener("click", function(){
+        play_blob(url_blob);
+        player_blob.className = "play";
+        setTimeout(function(){
+            player_blob.className = "";
+        }, time)
+});
+    
+});
+    
 navigator.mediaDevices.getUserMedia({
     audio: true
   })
   .then(stream => {
-    Silend_Send(stream, onSilence, onSpeak, 500, -45);
+    switch(key_mode){
+        case '0':
+            Silend_Send(stream, onSilence, onSpeak, 500, -45);
+            break;
+        case '1':
+	       window.addEventListener("keydown", Voice_Send);
+	       window.addEventListener("keyup", Voice_Send);
+
+            function Voice_Send(e){
+	          if (key == e.key) {
+	              e.repeat ? '' : console.log(e.type); // Pokazuje aktualnie kliknięty klawisz (akcje)
+	          	if (!e.repeat) {
+	          		console.log(copy_recorder);
+		        }
+	          }
+            }
+            break;   
+        };
     // do something else with the stream
   }).catch(e=>log.textContent=e);
+    
+function play_blob(blob){
+    document.querySelector("audio").src = blob;
+};
+    
+function handlePaste(e){
+    e.preventDefault;
+    var items = e.clipboardData.items;
+    Array.from(items).forEach(function(item){
+        console.log(item.type);
+        if(item.type.search('image') != -1){
+            var blob = item.getAsFile();
+            var source = URL.createObjectURL(blob);
+            
+               var image = document.createElement('img');
+                document.body.appendChild(image);
+                image.src = source;
+        }
+    });
+}    
+document.getElementsByClassName('messagesubmit')[0].addEventListener('paste', handlePaste)
 </script>
 </body>
 </html>
